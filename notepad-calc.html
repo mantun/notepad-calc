@@ -1,0 +1,1163 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notepad Calculator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230a7d4f'/><rect x='27' y='37' width='46' height='10' rx='5' fill='%23fff'/><rect x='27' y='55' width='46' height='10' rx='5' fill='%23fff'/></svg>">
+<style>
+:root{
+  --fs:14px; --lh:26px; --pt:16px; --pl:16px;
+  --bg:#fbfbfa; --bg2:#fff; --fg:#1f2328; --muted:#8a9099; --faint:#b8bec6;
+  --line:#ececec; --accent:#0a7d4f; --accent2:#3b6fd4; --err:#c0392b;
+  --bar:#fff; --shadow:0 1px 0 rgba(0,0,0,.04);
+  --sel:#d7ebff;
+  --t-comment:#9aa1ab; --t-num:#1d6fb8; --t-unit:#0a7d4f; --t-const:#b4690e;
+  --t-fn:#7c3aed; --t-var:#c0357a; --t-op:#475569;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Cascadia Code",Menlo,Consolas,"Liberation Mono",monospace;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#1b1d21; --bg2:#202327; --fg:#e6e8eb; --muted:#8b929c; --faint:#5b626c;
+    --line:#2c2f34; --accent:#4ec98a; --accent2:#7aa2f0; --err:#ff7a6b;
+    --bar:#202327; --shadow:0 1px 0 rgba(0,0,0,.3); --sel:#274b6d;
+    --t-comment:#6b7280; --t-num:#6cb6e3; --t-unit:#4ec98a; --t-const:#e0a458;
+    --t-fn:#b794f6; --t-var:#f08fb0; --t-op:#94a3b8;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--ui);
+  font-size:14px;-webkit-font-smoothing:antialiased;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100vh}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--bar);
+  border-bottom:1px solid var(--line);box-shadow:var(--shadow);flex:0 0 auto;z-index:5}
+.bar .title{font-weight:600;font-size:13px;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+.bar .title .dot{color:var(--accent)}
+.bar .spacer{flex:1}
+.bar .status{font-size:11px;color:var(--muted);min-width:48px;text-align:right}
+.btn{font:inherit;font-size:12px;color:var(--fg);background:transparent;border:1px solid var(--line);
+  padding:5px 11px;border-radius:7px;cursor:pointer;transition:background .12s,border-color .12s}
+.btn:hover{background:var(--bg);border-color:var(--faint)}
+.btn:active{transform:translateY(.5px)}
+.btn.primary{border-color:var(--accent);color:var(--accent)}
+
+.editor{flex:1 1 auto;display:flex;min-height:0;background:var(--bg2)}
+.gutter{flex:0 0 auto;min-width:42px;padding:var(--pt) 8px 40px 10px;text-align:right;
+  font-family:var(--mono);font-size:var(--fs);line-height:var(--lh);color:var(--faint);
+  background:var(--bg);border-right:1px solid var(--line);overflow:hidden;user-select:none;white-space:pre}
+.input-wrap{position:relative;flex:1 1 auto;min-width:0}
+.highlight,#input{margin:0;border:0;font-family:var(--mono);font-size:var(--fs);line-height:var(--lh);
+  padding:var(--pt) 14px 40px 14px;white-space:pre;tab-size:4}
+.highlight{position:absolute;inset:0;overflow:hidden;color:var(--fg);pointer-events:none;user-select:none;z-index:0}
+#input{position:absolute;inset:0;resize:none;outline:0;overflow:auto;z-index:1;
+  background:transparent;color:transparent;caret-color:var(--accent)}
+/* selected text is transparent by default (invisible) — give it a visible colour */
+#input::selection{background:var(--sel);color:var(--fg)}
+#input::-moz-selection{background:var(--sel);color:var(--fg)}
+.highlight .t-comment{color:var(--t-comment);font-style:italic}
+.highlight .t-num{color:var(--t-num)}
+.highlight .t-unit{color:var(--t-unit)}
+.highlight .t-const{color:var(--t-const)}
+.highlight .t-fn{color:var(--t-fn)}
+.highlight .t-var{color:var(--t-var)}
+.highlight .t-op{color:var(--t-op)}
+.results{flex:0 0 42%;max-width:560px;min-width:200px;border-left:1px solid var(--line);
+  font-family:var(--mono);font-size:var(--fs);line-height:var(--lh);
+  padding:var(--pt) 0 40px 0;overflow:hidden;background:var(--bg2)}
+.results .r{height:var(--lh);line-height:var(--lh);padding:0 14px;white-space:pre;overflow:hidden;
+  text-overflow:ellipsis;cursor:default;color:var(--accent);font-variant-numeric:tabular-nums}
+.results .r.has{cursor:pointer}
+.results .r.has:hover{background:var(--bg)}
+.results .r .sum{color:var(--muted)}
+.results .r.err{color:var(--err);opacity:.8}
+.results .r .u{color:var(--muted)}
+.results .r.assign{color:var(--accent2)}
+
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--fg);color:var(--bg2);padding:8px 16px;border-radius:8px;font-size:12px;
+  opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:30}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.help-wrap{position:fixed;inset:0;background:rgba(0,0,0,.34);display:none;z-index:40;
+  align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+.help-wrap.show{display:flex}
+.help{background:var(--bg2);color:var(--fg);max-width:760px;width:100%;border-radius:12px;
+  padding:26px 30px 32px;box-shadow:0 20px 60px rgba(0,0,0,.35);border:1px solid var(--line)}
+.help h2{margin:0 0 4px;font-size:18px}
+.help .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
+.help h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+  margin:18px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.help table{width:100%;border-collapse:collapse;font-size:13px}
+.help td{padding:3px 8px 3px 0;vertical-align:top}
+.help td.k{font-family:var(--mono);color:var(--accent);white-space:nowrap;width:42%}
+.help .close{float:right;cursor:pointer;color:var(--muted);font-size:20px;line-height:1;border:0;background:0}
+.help a{color:var(--accent2)}
+.help code{font-family:var(--mono);background:var(--bg);padding:1px 5px;border-radius:4px}
+</style>
+
+<div class="app">
+  <div class="bar">
+    <div class="title"><span class="dot">●</span> Notepad Calculator</div>
+    <div class="spacer"></div>
+    <span class="status" id="status"></span>
+    <button class="btn" id="btn-new">New</button>
+    <button class="btn" id="btn-copy">Copy link</button>
+    <button class="btn primary" id="btn-help">Help</button>
+  </div>
+  <div class="editor">
+    <div class="gutter" id="gutter">1</div>
+    <div class="input-wrap">
+      <div class="highlight" id="highlight"></div>
+      <textarea id="input" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" wrap="off"></textarea>
+    </div>
+    <div class="results" id="results"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="help-wrap" id="help-wrap">
+  <div class="help">
+    <button class="close" id="help-close">&times;</button>
+    <h2>Notepad Calculator</h2>
+    <div class="sub">Type math on the left, read results on the right. Everything is stored only in your browser &mdash; in this tab's URL and in local storage. Nothing is sent anywhere. Want a second note? Just open a new browser tab.</div>
+
+    <h3>Numbers</h3>
+    <table>
+      <tr><td class="k">0xff &nbsp; 0b1010</td><td>hex / binary literals</td></tr>
+      <tr><td class="k">1 000 000</td><td>spaces group digits (groups of 3)</td></tr>
+      <tr><td class="k">1.5e3 &nbsp; 2.4e-6</td><td>scientific notation</td></tr>
+      <tr><td class="k">100M &nbsp; 2000k</td><td>bare SI prefixes: k M G T P µ n p (m is metre)</td></tr>
+      <tr><td class="k">e &nbsp; pi &nbsp; &pi;</td><td>constants</td></tr>
+    </table>
+
+    <h3>Arithmetic</h3>
+    <table>
+      <tr><td class="k">+ &minus; * / ^</td><td>add, subtract, multiply, divide, power</td></tr>
+      <tr><td class="k">7 div 2 &nbsp; 7 mod 2</td><td>integer division, remainder</td></tr>
+      <tr><td class="k">200 + 10% &nbsp; 10% of 200</td><td>percent (of the other operand)</td></tr>
+    </table>
+
+    <h3>Functions <span style="text-transform:none;color:var(--faint)">(angles in radians)</span></h3>
+    <table>
+      <tr><td class="k">sin cos tg(=tan) ln</td><td>plus log exp sqrt abs asin acos atan round floor ceil</td></tr>
+      <tr><td class="k">sin(30 deg)</td><td>pass an angle unit to work in degrees</td></tr>
+    </table>
+
+    <h3>Times &amp; periods <span style="text-transform:none;color:var(--faint)">(h:mm:ss.sss, or Nd hh:mm:ss)</span></h3>
+    <table>
+      <tr><td class="k">9:30:00 - 8:15:30</td><td>clock arithmetic &rarr; 1:14:30</td></tr>
+      <tr><td class="k">0:45:00 * 3</td><td>&rarr; 2:15:00</td></tr>
+      <tr><td class="k">2d 03:04:05 + 1d</td><td>periods with days &rarr; 3d 03:04:05</td></tr>
+      <tr><td class="k">100000 in clock</td><td>&rarr; 1d 03:46:40 (over 24h shows days)</td></tr>
+    </table>
+
+    <h3>Dates &amp; epoch <span style="text-transform:none;color:var(--faint)">(UTC)</span></h3>
+    <table>
+      <tr><td class="k">"2024-01-15 12:00:00"</td><td>a datetime in ' or " quotes &rarr; epoch seconds</td></tr>
+      <tr><td class="k">'2024-01-15T09:00:00+0200'</td><td>ISO offsets accepted on input (shown in UTC)</td></tr>
+      <tr><td class="k">1705320000 ep</td><td>epoch (or <code>… in epoch</code>) &rarr; datetime; ms auto-detected</td></tr>
+      <tr><td class="k">"2024-01-15" + 3d</td><td>add / subtract a period to a datetime</td></tr>
+      <tr><td class="k">"2024-03-01" - "2024-01-15"</td><td>difference of datetimes &rarr; a period</td></tr>
+      <tr><td class="k">now</td><td>the current datetime</td></tr>
+    </table>
+
+    <h3>Units</h3>
+    <table>
+      <tr><td class="k">length</td><td>m km cm mm um nm mi yd ft inch nmi</td></tr>
+      <tr><td class="k">mass</td><td>kg g mg t lb oz st</td></tr>
+      <tr><td class="k">time</td><td>s ms min h day d w week year</td></tr>
+      <tr><td class="k">temperature</td><td>C F K (e.g. <code>20 C in F</code>)</td></tr>
+      <tr><td class="k">angle</td><td>deg rad</td></tr>
+      <tr><td class="k">data</td><td>b bit B byte kB MB GB TB KiB MiB GiB</td></tr>
+      <tr><td class="k">handy</td><td>L mL gal mph kmh knot</td></tr>
+      <tr><td class="k">100 ft &rarr; 30.48 m</td><td>every result normalises to SI; use <code>in</code> to pick a unit</td></tr>
+    </table>
+
+    <h3>Conversions &amp; variables</h3>
+    <table>
+      <tr><td class="k">90 km/h in m/s</td><td>convert to any unit</td></tr>
+      <tr><td class="k">255 in hex &nbsp; 0b101 in dec</td><td>change number base (hex / bin / dec)</td></tr>
+      <tr><td class="k">5:30:00 in min</td><td>time &rarr; 330 min</td></tr>
+      <tr><td class="k">rate = 85</td><td>assign a variable, reuse it below</td></tr>
+    </table>
+
+    <h3>Lists</h3>
+    <table>
+      <tr><td class="k">a column of numbers</td><td>consecutive plain-number lines show a running sum (&Sigma;) on the last line</td></tr>
+    </table>
+    <div class="sub" style="margin-top:16px">Tip: click any result to copy it. Every result normalises to SI (<code>100 ft</code> &rarr; <code>30.48 m</code>, <code>2 h</code> &rarr; <code>7200 s</code>); use <code>in</code> to choose any unit (<code>100 ft in cm</code>, <code>5000000 in M</code>). Clock times (<code>9:30:00</code>) keep their form.</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------- dimensions: [length, mass, time, temperature, angle, data] ---------- */
+var NDIM = 6;
+var BASE_SYM = ["m", "kg", "s", "K", "rad", "B"];
+var L = [1,0,0,0,0,0], M = [0,1,0,0,0,0], T = [0,0,1,0,0,0],
+    TH = [0,0,0,1,0,0], A = [0,0,0,0,1,0], D = [0,0,0,0,0,1],
+    SPEED = [1,0,-1,0,0,0], VOL = [3,0,0,0,0,0];
+function zeroDim(){ return [0,0,0,0,0,0]; }
+function dimIsZero(d){ for (var i=0;i<NDIM;i++) if (d[i]!==0) return false; return true; }
+function dimEq(a,b){ for (var i=0;i<NDIM;i++) if (a[i]!==b[i]) return false; return true; }
+function addDim(a,b){ var r=zeroDim(); for (var i=0;i<NDIM;i++) r[i]=a[i]+b[i]; return r; }
+function subDim(a,b){ var r=zeroDim(); for (var i=0;i<NDIM;i++) r[i]=a[i]-b[i]; return r; }
+function scaleDim(a,k){ var r=zeroDim(); for (var i=0;i<NDIM;i++) r[i]=a[i]*k; return r; }
+
+/* unit -> { dim, scale (to SI base), offset (affine, default 0), sym (display) } */
+var UNITS = {};
+function defUnit(names, dim, scale, offset, sym){
+  var list = names.split(/\s+/);
+  var canon = sym || list[0];
+  for (var i=0;i<list.length;i++)
+    UNITS[list[i]] = { dim: dim, scale: scale, offset: offset||0, sym: canon };
+}
+// length (SI base m)
+defUnit("m meter metre meters metres", L, 1);
+defUnit("km kilometer kilometre", L, 1000);
+defUnit("cm", L, 0.01); defUnit("mm", L, 0.001); defUnit("dm", L, 0.1);
+defUnit("um micron microns", L, 1e-6, 0, "um"); defUnit("nm", L, 1e-9);
+defUnit("mi mile miles", L, 1609.344, 0, "mi");
+defUnit("yd yard yards", L, 0.9144, 0, "yd");
+defUnit("ft foot feet", L, 0.3048, 0, "ft");
+defUnit("inch inches", L, 0.0254, 0, "inch");
+defUnit("nmi", L, 1852);
+// mass (SI base kg)
+defUnit("kg kilogram kilograms", M, 1);
+defUnit("g gram grams", M, 0.001);
+defUnit("mg", M, 1e-6); defUnit("t tonne tonnes ton tons", M, 1000, 0, "t");
+defUnit("lb lbs pound pounds", M, 0.45359237, 0, "lb");
+defUnit("oz ounce ounces", M, 0.028349523125, 0, "oz");
+defUnit("st stone stones", M, 6.35029318, 0, "st");
+// time (SI base s)
+defUnit("s sec secs second seconds", T, 1, 0, "s");
+defUnit("ms millisecond milliseconds", T, 0.001, 0, "ms");
+defUnit("min mins minute minutes", T, 60, 0, "min");
+defUnit("h hr hrs hour hours", T, 3600, 0, "h");
+defUnit("day days d", T, 86400, 0, "day");
+defUnit("w wk week weeks", T, 604800, 0, "week");
+defUnit("year years yr y", T, 31557600, 0, "year"); // Julian year (365.25 d)
+// temperature (SI base K, affine)
+defUnit("K kelvin", TH, 1, 0, "K");
+defUnit("C celsius", TH, 1, 273.15, "°C");
+defUnit("F fahrenheit", TH, 5/9, 255.3722222222222, "°F");
+// angle (SI base rad)
+defUnit("rad radian radians", A, 1, 0, "rad");
+defUnit("deg degree degrees", A, Math.PI/180, 0, "°");
+// data (base byte — the more common default than bit)
+defUnit("byte bytes B", D, 1, 0, "B");
+defUnit("bit bits", D, 0.125, 0, "bit");
+defUnit("b", D, 0.125, 0, "b");
+defUnit("kbit kb", D, 125, 0, "kbit"); defUnit("Mbit Mb", D, 125e3, 0, "Mbit"); defUnit("Gbit Gb", D, 125e6, 0, "Gbit");
+defUnit("kB KB", D, 1e3, 0, "kB"); defUnit("MB", D, 1e6, 0, "MB");
+defUnit("GB", D, 1e9, 0, "GB"); defUnit("TB", D, 1e12, 0, "TB");
+defUnit("KiB", D, 1024, 0, "KiB"); defUnit("MiB", D, 1048576, 0, "MiB"); defUnit("GiB", D, 1073741824, 0, "GiB");
+// convenience compound
+defUnit("L l litre liter litres liters", VOL, 0.001, 0, "L");
+defUnit("mL ml", VOL, 1e-6, 0, "mL"); defUnit("cl", VOL, 1e-5, 0, "cl"); defUnit("dl", VOL, 1e-4, 0, "dl");
+defUnit("gal gallon gallons", VOL, 0.00378541, 0, "gal");
+defUnit("mph", SPEED, 0.44704, 0, "mph");
+defUnit("kmh kph kmph", SPEED, 1000/3600, 0, "km/h");
+defUnit("knot knots kn", SPEED, 0.514444, 0, "knot");
+
+// bare SI magnitude prefixes — dimensionless multipliers, e.g. 100M, 2000k.
+// "m" is metre, so milli is unavailable as a bare prefix (use e-3).
+function defMag(name, scale){ UNITS[name] = { dim: zeroDim(), scale: scale, offset: 0, sym: name, mag: true }; }
+defMag("k", 1e3); defMag("M", 1e6); defMag("G", 1e9); defMag("T", 1e12); defMag("P", 1e15);
+defMag("µ", 1e-6); defMag("u", 1e-6); defMag("n", 1e-9); defMag("p", 1e-12);
+
+var CONSTS = { e: Math.E, pi: Math.PI, "π": Math.PI, tau: 2*Math.PI };
+var KEYWORDS = { "in":1, "to":1, "mod":1, "div":1, "of":1 };
+var BASES = { hex:16, hexadecimal:16, bin:2, binary:2, dec:10, decimal:10 };
+var FUNCS = { sin:1, cos:1, tan:1, tg:1, asin:1, acos:1, atan:1,
+  ln:1, log:1, exp:1, sqrt:1, abs:1, round:1, floor:1, ceil:1, cbrt:1 };
+
+function normUnitName(n){
+  if (n === "°C") return "C";
+  if (n === "°F") return "F";
+  if (n === "°") return "deg";
+  return n;
+}
+function lookupUnit(n){ return UNITS[normUnitName(n)] || null; }
+
+/* Quantity: value held in SI base units. */
+function Q(v, dim, opt){
+  opt = opt || {};
+  return {
+    v: v,
+    dim: dim || zeroDim(),
+    pref: opt.pref || null,      // preferred display unit symbol, or "clock"
+    pct: !!opt.pct,              // is a percentage (dimensionless)
+    unitAtom: !!opt.unitAtom,    // represents "1 <unit>" literally
+    uScale: opt.uScale, uOffset: opt.uOffset, uName: opt.uName,
+    display: opt.display || null,// explicit display override (conversions)
+    converted: !!opt.converted,
+    instant: !!opt.instant,      // absolute point in time (value = epoch seconds), vs a duration
+    datetimeDisplay: !!opt.datetimeDisplay, // instant shown as datetime string (else epoch number)
+    epochUnit: !!opt.epochUnit   // the "ep"/"epoch" annotation atom
+  };
+}
+function isPlainNumber(q){ return q && dimIsZero(q.dim) && !q.pct && !q.display && !q.converted && !q.instant; }
+
+/* epoch / datetime helpers (UTC) */
+var EPOCH_MS_THRESHOLD = 1e12; // values this large are milliseconds, not seconds
+function normalizeEpoch(v){ return Math.abs(v) >= EPOCH_MS_THRESHOLD ? v / 1000 : v; }
+function makeInstant(epochSeconds, datetimeDisplay){
+  return Q(epochSeconds, T.slice(), { instant: true, datetimeDisplay: datetimeDisplay });
+}
+function nowEpochSeconds(){ return Math.floor(Date.now() / 1000); } // whole-second precision
+function parseDatetime(s){
+  //                       year        month       day             hour     min       sec        .frac        tz offset
+  var m = /^\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{1,2})(?:\.(\d{1,3}))?)?)?\s*(Z|[+-]\d{2}:?\d{2}|[+-]\d{2})?\s*$/.exec(s);
+  if (!m) throw new Error("Not a datetime: \"" + s + "\"");
+  var frac = m[7] ? Math.round(+("0." + m[7]) * 1000) : 0;
+  var ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0), frac);
+  if (isNaN(ms)) throw new Error("Not a datetime: \"" + s + "\"");
+  var off = m[8];
+  if (off && off !== "Z"){                       // e.g. +0200, +02:00, -05 → convert to UTC
+    var digits = off.slice(1).replace(":", "");
+    var offMin = (+digits.slice(0, 2)) * 60 + (+(digits.slice(2) || 0));
+    ms -= (off[0] === "-" ? -1 : 1) * offMin * 60000;
+  }
+  return ms / 1000;
+}
+
+/* ---------- tokenizer ---------- */
+var RE_HEX  = /^0x[0-9a-fA-F]+(?:[ ][0-9a-fA-F]+)*/;
+var RE_BIN  = /^0b[01]+(?:[ ][01]+)*/;
+var RE_STR  = /^"([^"]*)"/;
+var RE_STRQ = /^'([^']*)'/;
+var RE_DUR  = /^(\d+)d[ \t]+(\d{1,3}):(\d{2})(?::(\d{2}(?:\.\d+)?))?/; // "2d 03:04:05"
+var RE_TIME = /^\d{1,3}:\d{2}(?::\d{2}(?:\.\d+)?)?/;
+var RE_NUM  = /^(?:\d{1,3}(?:[ ]\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?|^\.\d+(?:[eE][+-]?\d+)?/;
+var RE_NAME = /^[A-Za-z_°πµ][A-Za-z0-9_°πµ]*/;
+
+function parseTimeLiteral(str){
+  var p = str.split(":");
+  var sec;
+  if (p.length === 3) sec = (+p[0])*3600 + (+p[1])*60 + parseFloat(p[2]);
+  else sec = (+p[0])*3600 + parseFloat(p[1])*60; // h:mm
+  return sec;
+}
+
+function tokenize(src){
+  var toks = [], i = 0, n = src.length;
+  while (i < n){
+    var ch = src[i];
+    if (ch === " " || ch === "\t"){ i++; continue; }
+    var rest = src.slice(i), m;
+    if (ch === '"' || ch === "'"){
+      if ((m = (ch === '"' ? RE_STR : RE_STRQ).exec(rest))){ toks.push({ t:"str", v:m[1], raw:m[0] }); i += m[0].length; continue; }
+      throw new Error("Unterminated string");
+    }
+    if ((m = RE_HEX.exec(rest))){
+      toks.push({ t:"num", v: parseInt(m[0].replace(/ /g,"").slice(2),16), raw:m[0] });
+      i += m[0].length; continue;
+    }
+    if ((m = RE_BIN.exec(rest))){
+      toks.push({ t:"num", v: parseInt(m[0].replace(/ /g,"").slice(2),2), raw:m[0] });
+      i += m[0].length; continue;
+    }
+    if ((m = RE_DUR.exec(rest))){
+      var durSec = (+m[1])*86400 + (+m[2])*3600 + (+m[3])*60 + (m[4] ? parseFloat(m[4]) : 0);
+      toks.push({ t:"time", v: durSec, raw:m[0] });
+      i += m[0].length; continue;
+    }
+    if ((m = RE_TIME.exec(rest))){
+      toks.push({ t:"time", v: parseTimeLiteral(m[0]), raw:m[0] });
+      i += m[0].length; continue;
+    }
+    if ((m = RE_NUM.exec(rest))){
+      toks.push({ t:"num", v: parseFloat(m[0].replace(/ /g,"")), raw:m[0] });
+      i += m[0].length; continue;
+    }
+    if ((m = RE_NAME.exec(rest))){
+      var name = m[0];
+      if (KEYWORDS[name]) toks.push({ t:"kw", k:name, raw:name });
+      else toks.push({ t:"name", n:name, raw:name });
+      i += name.length; continue;
+    }
+    // operators / punctuation
+    if (ch === "×"){ toks.push({t:"op",op:"*",raw:ch}); i++; continue; }
+    if (ch === "÷"){ toks.push({t:"op",op:"/",raw:ch}); i++; continue; }
+    if (ch === "−"){ toks.push({t:"op",op:"-",raw:ch}); i++; continue; }
+    if ("+-*/^".indexOf(ch) >= 0){ toks.push({t:"op",op:ch,raw:ch}); i++; continue; }
+    if (ch === "("){ toks.push({t:"lp",raw:ch}); i++; continue; }
+    if (ch === ")"){ toks.push({t:"rp",raw:ch}); i++; continue; }
+    if (ch === "%"){ toks.push({t:"pct",raw:ch}); i++; continue; }
+    if (ch === "="){ toks.push({t:"eq",raw:ch}); i++; continue; }
+    if (ch === ","){ i++; continue; }
+    throw new Error("Unexpected character: " + ch);
+  }
+  return toks;
+}
+/* ---------- syntax highlighting (lexical, reuses the tokenizer regexes) ---------- */
+function escHtml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function scanAssignedVars(text){
+  var set = {}, lines = text.split("\n"), m;
+  for (var i = 0; i < lines.length; i++)
+    if ((m = /^\s*([A-Za-z_µ°π][A-Za-z0-9_µ°π]*)\s*=/.exec(lines[i]))) set[m[1]] = true;
+  return set;
+}
+function classifyName(name, vars){
+  if (KEYWORDS[name]) return "t-op";                                   // in to mod div of
+  if (FUNCS[name]) return "t-fn";
+  if (vars[name]) return "t-var";                                      // a variable shadows a unit
+  if (name === "now") return "t-const";
+  if (name === "ep" || name === "epoch") return "t-unit";
+  if (CONSTS[name] !== undefined) return "t-const";
+  if (BASES[name] !== undefined || name === "clock" || name === "time") return "t-unit";
+  if (lookupUnit(name)) return "t-unit";
+  return "t-var";
+}
+function highlightToHtml(text, vars, rows){
+  var lines = text.split("\n"), out = [];
+  for (var li = 0; li < lines.length; li++){
+    var line = lines[li];
+    if (rows[li] && rows[li].type === "comment"){            // #, //, or ignored prose
+      out.push('<span class="t-comment">' + escHtml(line) + "</span>");
+      continue;
+    }
+    var i = 0, n = line.length, buf = "", m;
+    while (i < n){
+      var rest = line.slice(i);
+      var ws = /^[ \t]+/.exec(rest);
+      if (ws){ buf += escHtml(ws[0]); i += ws[0].length; continue; }
+      if ((rest[0] === '"' || rest[0] === "'") && (m = (rest[0] === '"' ? RE_STR : RE_STRQ).exec(rest))){
+        buf += '<span class="t-num">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue; // quoted datetime
+      }
+      if ((m = RE_HEX.exec(rest)) || (m = RE_BIN.exec(rest)) || (m = RE_DUR.exec(rest)) || (m = RE_TIME.exec(rest)) || (m = RE_NUM.exec(rest))){
+        buf += '<span class="t-num">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue;
+      }
+      if ((m = RE_NAME.exec(rest))){
+        buf += '<span class="' + classifyName(m[0], vars) + '">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue;
+      }
+      var ch = line[i];
+      if ("+-*/^×÷−%=()".indexOf(ch) >= 0) buf += '<span class="t-op">' + escHtml(ch) + "</span>";
+      else buf += escHtml(ch);
+      i++;
+    }
+    out.push(buf);
+  }
+  return out.join("\n");
+}
+
+/* ---------- parser ----------
+   AST nodes:
+     {k:"num",v}  {k:"time",v}  {k:"name",n}
+     {k:"call",fn,arg}  {k:"unary",op,a}  {k:"bin",op,a,b}  {k:"pow",a,b}
+     {k:"pct",a}  {k:"conv",a,target}
+   conv target: {kind:"base",base}  {kind:"clock"}  {kind:"unit",node,label,single}
+*/
+function Parser(toks){ this.toks = toks; this.i = 0; }
+Parser.prototype.peek = function(){ return this.toks[this.i] || null; };
+Parser.prototype.next = function(){ return this.toks[this.i++]; };
+Parser.prototype.eof  = function(){ return this.i >= this.toks.length; };
+
+// can the upcoming token begin a new atom (=> implicit multiplication)?
+Parser.prototype.startsAtom = function(){
+  var t = this.peek();
+  if (!t) return false;
+  return t.t === "num" || t.t === "time" || t.t === "lp" || t.t === "name";
+};
+
+Parser.prototype.parse = function(){
+  var node = this.parseConversion();
+  if (!this.eof()) throw new Error("Unexpected '" + (this.peek().raw||"") + "'");
+  return node;
+};
+
+Parser.prototype.parseConversion = function(){
+  var left = this.parseAddSub();
+  while (this.peek() && this.peek().t === "kw" && (this.peek().k === "in" || this.peek().k === "to")){
+    this.next();
+    left = { k:"conv", a:left, target:this.parseTarget() };
+  }
+  return left;
+};
+
+Parser.prototype.parseTarget = function(){
+  var t = this.peek();
+  if (t && t.t === "name" && BASES[t.n] !== undefined){
+    this.next();
+    return { kind:"base", base: BASES[t.n], name:t.n };
+  }
+  if (t && t.t === "name" && (t.n === "clock" || t.n === "time")){
+    this.next();
+    return { kind:"clock" };
+  }
+  if (t && t.t === "name" && (t.n === "epoch" || t.n === "ep")){
+    this.next();
+    return { kind:"epoch" };
+  }
+  // unit expression: parse a product/quotient of unit atoms
+  var start = this.i;
+  var node = this.parseMulDiv();
+  var consumed = this.toks.slice(start, this.i);
+  var label = consumed.map(function(x){ return x.raw; }).join("");
+  var single = null;
+  if (consumed.length === 1 && consumed[0].t === "name") single = consumed[0].n;
+  return { kind:"unit", node: node, label: label, single: single };
+};
+
+Parser.prototype.parseAddSub = function(){
+  var left = this.parseMulDiv();
+  while (this.peek() && this.peek().t === "op" && (this.peek().op === "+" || this.peek().op === "-")){
+    var op = this.next().op;
+    left = { k:"bin", op:op, a:left, b:this.parseMulDiv() };
+  }
+  return left;
+};
+
+Parser.prototype.parseMulDiv = function(){
+  var left = this.parseImplicit();
+  for (;;){
+    var t = this.peek();
+    if (t && t.t === "op" && (t.op === "*" || t.op === "/")){
+      this.next();
+      left = { k:"bin", op:t.op, a:left, b:this.parseImplicit() };
+    } else if (t && t.t === "kw" && (t.k === "mod" || t.k === "div" || t.k === "of")){
+      this.next();
+      left = { k:"bin", op:t.k, a:left, b:this.parseImplicit() };
+    } else break;
+  }
+  return left;
+};
+
+// implicit multiplication (juxtaposition) binds TIGHTER than * and / so that
+// "2 h" in "10 km / 2 h" groups as one quantity:  (10 km) / (2 h), not ((10 km)/2)·h
+Parser.prototype.parseImplicit = function(){
+  var left = this.parseUnary();
+  while (this.startsAtom()){
+    left = { k:"bin", op:"*", a:left, b:this.parseUnary() };
+  }
+  return left;
+};
+
+Parser.prototype.parseUnary = function(){
+  var t = this.peek();
+  if (t && t.t === "op" && (t.op === "+" || t.op === "-")){
+    this.next();
+    return { k:"unary", op:t.op, a:this.parseUnary() };
+  }
+  return this.parsePow();
+};
+
+Parser.prototype.parsePow = function(){
+  var base = this.parsePostfix();
+  if (this.peek() && this.peek().t === "op" && this.peek().op === "^"){
+    this.next();
+    return { k:"pow", a:base, b:this.parseUnary() }; // right-assoc, exponent may be unary
+  }
+  return base;
+};
+
+Parser.prototype.parsePostfix = function(){
+  var node = this.parseAtom();
+  while (this.peek() && this.peek().t === "pct"){ this.next(); node = { k:"pct", a:node }; }
+  return node;
+};
+
+Parser.prototype.parseAtom = function(){
+  var t = this.next();
+  if (!t) throw new Error("Unexpected end of expression");
+  if (t.t === "num")  return { k:"num", v:t.v };
+  if (t.t === "time") return { k:"time", v:t.v };
+  if (t.t === "str")  return { k:"datetime", s:t.v };
+  if (t.t === "lp"){
+    var inner = this.parseConversion();
+    var c = this.next();
+    if (!c || c.t !== "rp") throw new Error("Missing ')'");
+    return inner;
+  }
+  if (t.t === "name"){
+    if (FUNCS[t.n]){
+      if (this.peek() && this.peek().t === "lp"){
+        this.next();
+        var arg = this.parseConversion();
+        var c2 = this.next();
+        if (!c2 || c2.t !== "rp") throw new Error("Missing ')'");
+        return { k:"call", fn:t.n, arg:arg };
+      }
+      // function without parentheses grabs a product, e.g. "sin 30 deg"
+      return { k:"call", fn:t.n, arg:this.parseMulDiv() };
+    }
+    return { k:"name", n:t.n };
+  }
+  throw new Error("Unexpected '" + (t.raw || "") + "'");
+};
+
+function parseExpr(toks){ return new Parser(toks).parse(); }
+/* ---------- evaluator ---------- */
+function resolveName(n, scope){
+  if (Object.prototype.hasOwnProperty.call(scope, n)){
+    var s = scope[n];
+    return Q(s.v, s.dim.slice(), { pref:s.pref, pct:s.pct, instant:s.instant, datetimeDisplay:s.datetimeDisplay });
+  }
+  if (n === "now") return makeInstant(nowEpochSeconds(), true);
+  if (n === "ep" || n === "epoch")
+    return Q(1, T.slice(), { unitAtom:true, epochUnit:true, uName:"epoch", uScale:1, uOffset:0 });
+  if (CONSTS[n] !== undefined) return Q(CONSTS[n], zeroDim(), {});
+  var u = lookupUnit(n);
+  if (u) return Q(u.scale, u.dim.slice(), { unitAtom:true, uScale:u.scale, uOffset:u.offset, uName:u.sym, pref:u.sym });
+  throw new Error("Unknown name: " + n);
+}
+
+function opAddSub(a, b, sub){
+  var sign = sub ? -1 : 1;
+  // datetime arithmetic: instant ± period = instant; instant - instant = period
+  if (a.instant || b.instant){
+    if (a.instant && b.instant){
+      if (sub) return Q(a.v - b.v, T.slice(), { pref:"clock" });
+      throw new Error("Cannot add two datetimes");
+    }
+    var inst = a.instant ? a : b, per = a.instant ? b : a;
+    if (!dimEq(per.dim, T)) throw new Error("Only a time period can be added to a datetime");
+    if (sub && !a.instant) throw new Error("Cannot subtract a datetime from a period");
+    return makeInstant(sub ? a.v - b.v : a.v + b.v, inst.datetimeDisplay);
+  }
+  if (b.pct && !a.pct) return Q(a.v + sign*a.v*b.v, a.dim.slice(), { pref:a.pref });
+  if (a.pct && b.pct)  return Q(a.v + sign*b.v, zeroDim(), { pct:true });
+  if (a.pct && !b.pct){
+    if (!dimIsZero(b.dim)) throw new Error("Cannot mix percent with a unit");
+    return Q(a.v + sign*b.v, zeroDim(), {});
+  }
+  if (!dimEq(a.dim, b.dim)) throw new Error("Cannot " + (sub?"subtract":"add") + " incompatible units");
+  return Q(a.v + sign*b.v, a.dim.slice(), { pref: a.pref || b.pref });
+}
+
+function opMul(a, b){
+  // "<number> ep" / "<number> epoch" -> a datetime
+  if (dimIsZero(a.dim) && !a.pct && b.epochUnit) return makeInstant(normalizeEpoch(a.v), true);
+  if (dimIsZero(b.dim) && !b.pct && a.epochUnit) return makeInstant(normalizeEpoch(b.v), true);
+  // scalar applied to a bare unit atom (handles affine temperature too)
+  if (dimIsZero(a.dim) && !a.pct && b.unitAtom)
+    return Q(a.v * b.uScale + (b.uOffset||0), b.dim.slice(), { pref:b.uName });
+  if (dimIsZero(b.dim) && !b.pct && a.unitAtom)
+    return Q(b.v * a.uScale + (a.uOffset||0), a.dim.slice(), { pref:a.uName });
+  var v = a.v * b.v, dim = addDim(a.dim, b.dim), pref = null;
+  if (dimIsZero(a.dim) && !a.pct) pref = b.pref;
+  else if (dimIsZero(b.dim) && !b.pct) pref = a.pref;
+  return Q(v, dim, { pref:pref, pct: a.pct && b.pct });
+}
+
+function opDiv(a, b){
+  if (b.uOffset) throw new Error("Cannot divide by a temperature");
+  if (b.v === 0) throw new Error("Division by zero");
+  var v = a.v / b.v, dim = subDim(a.dim, b.dim), pref = null;
+  if (dimIsZero(b.dim) && !b.pct) pref = a.pref;
+  return Q(v, dim, { pref:pref });
+}
+
+function opModDiv(a, b, isDiv){
+  if (!dimIsZero(a.dim) || !dimIsZero(b.dim) || a.pct || b.pct)
+    throw new Error((isDiv?"div":"mod") + " needs plain numbers");
+  if (b.v === 0) throw new Error("Division by zero");
+  var q = Math.floor(a.v / b.v);
+  return Q(isDiv ? q : a.v - q*b.v, zeroDim(), {});
+}
+
+function opPow(a, b){
+  if (!dimIsZero(b.dim) || b.pct) throw new Error("Exponent must be a plain number");
+  var e = b.v;
+  if (dimIsZero(a.dim)) return Q(Math.pow(a.v, e), zeroDim(), {});
+  return Q(Math.pow(a.v, e), scaleDim(a.dim, e), { pref:null });
+}
+
+function asAngleRadians(q){
+  if (dimEq(q.dim, A)) return q.v;          // angle stored in radians (base)
+  if (dimIsZero(q.dim) && !q.pct) return q.v; // bare number = radians
+  throw new Error("Expected a number or angle");
+}
+function asScalar(q, what){
+  if (dimIsZero(q.dim) && !q.pct) return q.v;
+  if (q.pct) return q.v;
+  throw new Error((what||"Argument") + " must be a plain number");
+}
+
+function callFunc(fn, q){
+  switch (fn){
+    case "sin": return Q(Math.sin(asAngleRadians(q)), zeroDim(), {});
+    case "cos": return Q(Math.cos(asAngleRadians(q)), zeroDim(), {});
+    case "tan": case "tg": return Q(Math.tan(asAngleRadians(q)), zeroDim(), {});
+    case "asin": return Q(Math.asin(asScalar(q,"asin")), A.slice(), { pref:"rad" });
+    case "acos": return Q(Math.acos(asScalar(q,"acos")), A.slice(), { pref:"rad" });
+    case "atan": return Q(Math.atan(asScalar(q,"atan")), A.slice(), { pref:"rad" });
+    case "ln":  return Q(Math.log(asScalar(q,"ln")), zeroDim(), {});
+    case "log": return Q(Math.log10(asScalar(q,"log")), zeroDim(), {});
+    case "exp": return Q(Math.exp(asScalar(q,"exp")), zeroDim(), {});
+    case "sqrt":
+      if (dimIsZero(q.dim) && !q.pct) return Q(Math.sqrt(q.v), zeroDim(), {});
+      return Q(Math.sqrt(q.v), scaleDim(q.dim, 0.5), { pref:null });
+    case "cbrt":
+      if (dimIsZero(q.dim) && !q.pct) return Q(Math.cbrt(q.v), zeroDim(), {});
+      return Q(Math.cbrt(q.v), scaleDim(q.dim, 1/3), { pref:null });
+    case "abs": return Q(Math.abs(q.v), q.dim.slice(), { pref:q.pref, pct:q.pct });
+    case "round": return Q(Math.round(asScalar(q,"round")), zeroDim(), {});
+    case "floor": return Q(Math.floor(asScalar(q,"floor")), zeroDim(), {});
+    case "ceil":  return Q(Math.ceil(asScalar(q,"ceil")), zeroDim(), {});
+  }
+  throw new Error("Unknown function: " + fn);
+}
+
+function evalNode(node, scope){
+  switch (node.k){
+    case "num":  return Q(node.v, zeroDim(), {});
+    case "time": return Q(node.v, T.slice(), { pref:"clock" });
+    case "datetime": return makeInstant(parseDatetime(node.s), false); // quoted -> epoch seconds
+    case "name": return resolveName(node.n, scope);
+    case "call": return callFunc(node.fn, evalNode(node.arg, scope));
+    case "pct": {
+      var p = evalNode(node.a, scope);
+      if (!dimIsZero(p.dim)) throw new Error("Percent needs a plain number");
+      return Q(p.v / 100, zeroDim(), { pct:true });
+    }
+    case "unary": {
+      var u = evalNode(node.a, scope);
+      if (node.op === "-") return Q(-u.v, u.dim.slice(), { pref:u.pref, pct:u.pct });
+      return u;
+    }
+    case "pow": return opPow(evalNode(node.a, scope), evalNode(node.b, scope));
+    case "bin": {
+      var a = evalNode(node.a, scope), b = evalNode(node.b, scope);
+      switch (node.op){
+        case "+": return opAddSub(a, b, false);
+        case "-": return opAddSub(a, b, true);
+        case "*": case "of": return opMul(a, b);
+        case "/": return opDiv(a, b);
+        case "mod": return opModDiv(a, b, false);
+        case "div": return opModDiv(a, b, true);
+      }
+      throw new Error("Unknown operator " + node.op);
+    }
+    case "conv": {
+      var src = evalNode(node.a, scope);
+      if (node.target.kind === "epoch"){                       // show as a datetime
+        return makeInstant(src.instant ? src.v : normalizeEpoch(src.v), true);
+      }
+      src.display = convertDisplay(src, node.target, scope);
+      src.converted = true;
+      return src;
+    }
+  }
+  throw new Error("Cannot evaluate");
+}
+
+function convertDisplay(q, target, scope){
+  if (target.kind === "base"){
+    if (!dimIsZero(q.dim) || q.pct) throw new Error("Only a plain number converts to " + target.name);
+    return toBase(q.v, target.base);
+  }
+  if (target.kind === "clock"){
+    if (!dimEq(q.dim, T) && !dimIsZero(q.dim)) throw new Error("Only a time or number converts to clock");
+    return fmtClock(q.v); // dimensionless is treated as seconds
+  }
+  // unit target
+  var tq = evalNode(target.node, scope);
+  if (!dimEq(q.dim, tq.dim)) throw new Error("Cannot convert to " + target.label);
+  var u = target.single ? lookupUnit(target.single) : null;
+  var val;
+  if (u && u.offset) val = (q.v - u.offset) / u.scale;     // affine (temperature)
+  else val = q.v / tq.v;                                    // ratio
+  var label = u ? u.sym : target.label;
+  var sep = (u && u.mag) ? "" : " ";                        // 98M, but 30.48 m/s
+  return fmtNum(val) + sep + label;
+}
+/* ---------- formatting ---------- */
+function fmtNum(x){
+  if (typeof x !== "number" || isNaN(x)) return "?";
+  if (!isFinite(x)) return x > 0 ? "∞" : "-∞";
+  if (x === 0) return "0";
+  var ax = Math.abs(x);
+  if (ax >= 1e15 || ax < 1e-6){
+    var s = x.toExponential(6).replace(/(\.\d*?)0+e/, "$1e").replace(/\.e/, "e").replace("e+", "e");
+    return s;
+  }
+  var r = Number(x.toPrecision(12));
+  var neg = r < 0; r = Math.abs(r);
+  var str = r.toString();
+  var parts = str.split("."), ip = parts[0], fp = parts[1] || "";
+  ip = ip.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-" : "") + ip + (fp ? "." + fp : "");
+}
+
+function fmtClock(sec){
+  var neg = sec < 0; sec = Math.abs(sec);
+  var days = Math.floor(sec / 86400);
+  var rem = sec - days*86400;
+  var h = Math.floor(rem / 3600);
+  var m = Math.floor((rem % 3600) / 60);
+  var s = rem - h*3600 - m*60;
+  var ss;
+  if (Math.abs(s - Math.round(s)) < 1e-9) ss = String(Math.round(s));
+  else ss = (Math.round(s*1000)/1000).toString();
+  var pad = function(x){ return (x < 10 ? "0" : "") + x; };
+  var sPad = (parseFloat(ss) < 10 ? "0" : "") + ss;
+  if (days > 0) return (neg ? "-" : "") + days + "d " + pad(h) + ":" + pad(m) + ":" + sPad; // ≥ 24h
+  return (neg ? "-" : "") + h + ":" + pad(m) + ":" + sPad;
+}
+function fmtEpoch(v){ return String(v); } // epoch seconds, ungrouped for copy-paste
+function formatInstant(epochSeconds){
+  var d = new Date(epochSeconds * 1000);
+  if (isNaN(d.getTime())) return "invalid date";
+  var p = function(x){ return (x < 10 ? "0" : "") + x; };
+  var s = d.getUTCFullYear() + "-" + p(d.getUTCMonth()+1) + "-" + p(d.getUTCDate())
+        + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
+  var frac = epochSeconds - Math.floor(epochSeconds);
+  if (Math.abs(frac) > 1e-6) s += "." + String(Math.round(Math.abs(frac) * 1000)).padStart(3, "0");
+  return s + " UTC";
+}
+
+var SUP = { "-":"⁻", ".":"·", "0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹" };
+function sup(e){
+  if (e === 1) return "";
+  if (e === Math.floor(e)){
+    return String(e).split("").map(function(c){ return SUP[c] || c; }).join("");
+  }
+  return "^" + e;
+}
+function supSigned(e){ // negative exponent, e.g. -1 -> "⁻¹"
+  var n = Math.abs(e);
+  if (e === Math.floor(e)) return "⁻" + String(n).split("").map(function(c){ return SUP[c] || c; }).join("");
+  return "^" + e;
+}
+function composeSI(dim){
+  var num = [], den = [];
+  for (var i = 0; i < NDIM; i++){
+    var e = dim[i];
+    if (e > 0) num.push(BASE_SYM[i] + sup(e));
+    else if (e < 0) den.push([BASE_SYM[i], e]);
+  }
+  if (!den.length) return num.length ? num.join("·") : "";
+  if (!num.length) // pure inverse: m⁻¹, s⁻², ...
+    return den.map(function(d){ return d[0] + supSigned(d[1]); }).join("·");
+  var ds = den.map(function(d){ return d[0] + sup(-d[1]); });
+  ds = ds.length > 1 ? "(" + ds.join("·") + ")" : ds[0];
+  return num.join("·") + "/" + ds;
+}
+
+function displayQ(q){
+  if (q.display) return q.display;                 // explicit "... in unit" override
+  if (q.instant) return q.datetimeDisplay ? formatInstant(q.v) : fmtEpoch(q.v);
+  if (q.pct) return fmtNum(q.v * 100) + "%";
+  if (dimIsZero(q.dim)) return fmtNum(q.v);        // plain numbers (incl. bare prefixes)
+  if (q.pref === "clock") return fmtClock(q.v);    // h:mm:ss literals keep clock form
+  var unit = composeSI(q.dim);                     // everything else normalises to SI
+  return fmtNum(q.v) + (unit ? " " + unit : "");
+}
+
+function toBase(value, base){
+  var v = Math.round(value);
+  var neg = v < 0; v = Math.abs(v);
+  var prefix = base === 16 ? "0x" : base === 2 ? "0b" : "";
+  if (base === 10) return (neg ? "-" : "") + fmtNum(v);
+  return (neg ? "-" : "") + prefix + v.toString(base);
+}
+/* ---------- document evaluation ---------- */
+function evalLine(line, scope){
+  var toks;
+  try { toks = tokenize(line); }
+  catch (e){ return { type:"error", msg:e.message }; }
+  if (!toks.length) return { type:"comment" };
+
+  // assignment:  name = expr  (a variable shadows any unit/constant of the same name)
+  if (toks.length >= 2 && toks[0].t === "name" && toks[1].t === "eq"){
+    var name = toks[0].n;
+    var rhs = toks.slice(2);
+    if (!rhs.length) return { type:"error", msg:"Missing value" };
+    var node = parseExpr(rhs);
+    var q = evalNode(node, scope);
+    scope[name] = q;
+    return { type:"result", q:q, str:displayQ(q), assign:true, listable:false };
+  }
+
+  if (toks.some(function(t){ return t.t === "eq"; }))
+    throw new Error("Unexpected '='");
+
+  var ast = parseExpr(toks);
+  var qv = evalNode(ast, scope);
+  // a "list item" is a line that is just a number literal (so columns sum,
+  // but unrelated adjacent calculations don't get lumped together)
+  return { type:"result", q:qv, str:displayQ(qv), listable: isNumberLiteralNode(ast) && isPlainNumber(qv) };
+}
+
+function isNumberLiteralNode(node){
+  if (!node) return false;
+  if (node.k === "num") return true;
+  if (node.k === "unary") return isNumberLiteralNode(node.a);
+  return false;
+}
+
+function evaluateDoc(text){
+  var lines = text.split("\n");
+  var scope = {};
+  var out = [];
+  for (var i = 0; i < lines.length; i++){
+    var line = lines[i];
+    if (/^\s*$/.test(line)){ out.push({ type:"blank" }); continue; }
+    if (/^\s*(#|\/\/)/.test(line)){ out.push({ type:"comment" }); continue; }
+    try { out.push(evalLine(line, scope)); }
+    catch (e){
+      // silently ignore plain prose; only flag lines that look like math
+      if (/[0-9"]/.test(line) || /[-+*/^=()%]/.test(line))
+        out.push({ type:"error", msg:e.message });
+      else out.push({ type:"comment" });
+    }
+  }
+  // running sums over consecutive plain-number result lines
+  var i2 = 0;
+  while (i2 < out.length){
+    if (out[i2].type === "result" && out[i2].listable){
+      var j = i2, sum = 0, count = 0;
+      while (j < out.length && out[j].type === "result" && out[j].listable){
+        sum += out[j].q.v; count++; j++;
+      }
+      if (count >= 2){
+        out[j-1].sum = sum;
+        out[j-1].sumStr = fmtNum(sum);
+        out[j-1].count = count;
+      }
+      i2 = j;
+    } else i2++;
+  }
+  return out;
+}
+
+if (typeof module !== "undefined" && module.exports){
+  module.exports = { evaluateDoc: evaluateDoc, evalLine: evalLine,
+    tokenize: tokenize, parseExpr: parseExpr, displayQ: displayQ, fmtNum: fmtNum,
+    highlightToHtml: highlightToHtml, scanAssignedVars: scanAssignedVars };
+}
+/* ---------- UI ---------- */
+function initUI(){
+  var input   = document.getElementById("input");
+  var highlightEl = document.getElementById("highlight");
+  var results = document.getElementById("results");
+  var gutter  = document.getElementById("gutter");
+  var statusEl= document.getElementById("status");
+  var toastEl = document.getElementById("toast");
+  var helpWrap= document.getElementById("help-wrap");
+  var KEY = "notepad-calc.v1";
+
+  var DEFAULT_NOTE = [
+    "# Notepad Calculator — type math, read results →",
+    "# Stored only on your machine (this tab's URL + local storage).",
+    "# A second note? Just open a new browser tab.  •  Click Help for the full syntax.",
+    "",
+    "# numbers: hex, binary, spaced groups, scientific, SI prefixes",
+    "0xff + 0b1010",
+    "1 000 000 / 12",
+    "1.5e3 + 2.5e3",
+    "100M - 2000k in M",
+    "",
+    "# variables",
+    "rate = 85",
+    "hours = 37.5",
+    "rate * hours",
+    "",
+    "# units — everything normalises to SI; use 'in' to choose",
+    "100 ft",
+    "100 ft/s",
+    "90 km/h in m/s",
+    "75 kg in lb",
+    "20 C in F",
+    "",
+    "# times & periods  (h:mm:ss, Nd hh:mm:ss)",
+    "9:30:00 - 8:15:30",
+    "2d 03:04:05 + 1d",
+    "",
+    "# dates & epoch  (UTC)",
+    '"2024-03-01" - "2024-01-15"',
+    "1705320000 ep",
+    "now",
+    "",
+    "# functions (radians) + constants e, pi",
+    "sin(pi/2)",
+    "ln(e^3)",
+    "",
+    "# number bases",
+    "255 in hex",
+    "0b1011 in dec",
+    "",
+    "# a column of numbers shows its sum (Σ)",
+    "12.50",
+    "8.00",
+    "4.25"
+  ].join("\n");
+
+  function encodeText(t){
+    try { return btoa(unescape(encodeURIComponent(t)))
+      .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+    catch(e){ return ""; }
+  }
+  function decodeText(s){
+    try {
+      var b = s.replace(/-/g,"+").replace(/_/g,"/");
+      while (b.length % 4) b += "=";
+      return decodeURIComponent(escape(atob(b)));
+    } catch(e){ return null; }
+  }
+
+  function loadInitial(){
+    if (location.hash.length > 1){
+      var t = decodeText(location.hash.slice(1));
+      if (t !== null) return t;
+    }
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch(e){}
+    if (saved !== null) return saved;
+    return DEFAULT_NOTE;
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function render(){
+    var text = input.value;
+    var rows = evaluateDoc(text);
+    var lineCount = text.split("\n").length;
+
+    // syntax-highlight backdrop
+    highlightEl.innerHTML = highlightToHtml(text, scanAssignedVars(text), rows);
+
+    // gutter
+    var nums = [];
+    for (var n = 1; n <= lineCount; n++) nums.push(n);
+    gutter.textContent = nums.join("\n");
+
+    // results
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var div = document.createElement("div");
+      div.className = "r";
+      if (r.type === "result"){
+        div.classList.add("has");
+        if (r.assign) div.classList.add("assign");
+        div.textContent = r.str;
+        div.title = "Click to copy: " + r.str;
+        div.setAttribute("data-copy", r.str);
+        if (r.sum !== undefined){
+          var s = document.createElement("span");
+          s.className = "sum";
+          s.textContent = "   Σ " + r.sumStr;
+          s.title = r.count + " values";
+          div.appendChild(s);
+        }
+      } else if (r.type === "error"){
+        div.classList.add("err");
+        div.textContent = "⚠";
+        div.title = r.msg;
+      } else {
+        div.innerHTML = "&nbsp;";
+      }
+      frag.appendChild(div);
+    }
+    results.replaceChildren(frag);
+    syncScroll();
+  }
+
+  function syncScroll(){
+    results.scrollTop = input.scrollTop;
+    gutter.scrollTop  = input.scrollTop;
+    highlightEl.scrollTop  = input.scrollTop;
+    highlightEl.scrollLeft = input.scrollLeft;
+  }
+
+  var statusTimer;
+  function flashStatus(msg){
+    statusEl.textContent = msg;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(function(){ statusEl.textContent = ""; }, 1400);
+  }
+
+  var saveTimer;
+  function scheduleSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 350);
+  }
+  function save(){
+    var text = input.value;
+    try { localStorage.setItem(KEY, text); } catch(e){}
+    try { history.replaceState(null, "", location.pathname + location.search + "#" + encodeText(text)); } catch(e){}
+    flashStatus("saved");
+  }
+
+  var toastTimer;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 1400);
+  }
+
+  function copyText(t){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(function(){ toast("Copied  " + t); },
+        function(){ fallbackCopy(t); });
+    } else fallbackCopy(t);
+  }
+  function fallbackCopy(t){
+    var ta = document.createElement("textarea");
+    ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("Copied  " + t); } catch(e){}
+    document.body.removeChild(ta);
+  }
+
+  // events
+  input.addEventListener("input", function(){ render(); scheduleSave(); });
+  input.addEventListener("scroll", syncScroll);
+  // allow tab to indent instead of leaving the textarea
+  input.addEventListener("keydown", function(e){
+    if (e.key === "Tab"){
+      e.preventDefault();
+      var s = input.selectionStart, en = input.selectionEnd;
+      input.value = input.value.slice(0, s) + "\t" + input.value.slice(en);
+      input.selectionStart = input.selectionEnd = s + 1;
+      render(); scheduleSave();
+    }
+  });
+  results.addEventListener("click", function(e){
+    var t = e.target.closest ? e.target.closest(".r.has") : null;
+    if (t && t.getAttribute("data-copy") !== null) copyText(t.getAttribute("data-copy"));
+  });
+
+  document.getElementById("btn-new").addEventListener("click", function(){
+    if (input.value.trim() && !confirm("Clear this note and start a new one?\n(Copy this tab's URL if you want to keep it.)")) return;
+    input.value = "";
+    try { history.replaceState(null, "", location.pathname + location.search); } catch(e){}
+    try { localStorage.removeItem(KEY); } catch(e){}
+    render(); input.focus();
+  });
+  document.getElementById("btn-copy").addEventListener("click", function(){
+    save();
+    copyText(location.href);
+    toast("Link copied — it contains your whole note");
+  });
+  document.getElementById("btn-help").addEventListener("click", function(){ helpWrap.classList.add("show"); });
+  document.getElementById("help-close").addEventListener("click", function(){ helpWrap.classList.remove("show"); });
+  helpWrap.addEventListener("click", function(e){ if (e.target === helpWrap) helpWrap.classList.remove("show"); });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape") helpWrap.classList.remove("show"); });
+
+  window.addEventListener("hashchange", function(){
+    var t = decodeText(location.hash.slice(1));
+    if (t !== null && t !== input.value){ input.value = t; render(); }
+  });
+  window.addEventListener("beforeunload", save);
+
+  // boot
+  input.value = loadInitial();
+  render();
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+if (typeof document !== "undefined"){
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initUI);
+  else initUI();
+}
+</script>
